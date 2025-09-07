@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { login, me } from '../lib/api'
+import { login, me } from '../shared/adminApi'
 import { useNavigate } from 'react-router-dom'
 
 export default function AdminLogin(){

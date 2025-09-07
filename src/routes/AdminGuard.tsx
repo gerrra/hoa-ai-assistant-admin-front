@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { me } from '../lib/api'
+import { me } from '../shared/adminApi'
 import { useNavigate } from 'react-router-dom'
 
 export default function AdminGuard({children}:{children:React.ReactNode}){

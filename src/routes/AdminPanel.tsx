@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { listDocuments, listLogs, uploadDocument, logout } from '../lib/api'
+import { listDocuments, listLogs, uploadDocument, logout } from '../shared/adminApi'
 
 type DocType = 'CC&R'|'Bylaws'|'Rules'|'Policy'|'Guidelines'
 
