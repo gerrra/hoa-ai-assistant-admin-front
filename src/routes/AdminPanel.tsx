@@ -33,19 +33,47 @@ export default function AdminPanel(){
     if(tab==='logs') reloadLogs() 
   },[tab,communityId])
 
+  const validateFileSize = (file: File): boolean => {
+    const maxSize = 25 * 1024 * 1024; // 25MB
+    if (file.size > maxSize) {
+      setStatus('Ошибка: Файл слишком большой. Максимальный размер: 25MB')
+      return false
+    }
+    return true
+  }
+
   const onUpload = async (e: React.FormEvent<HTMLFormElement>)=>{
     e.preventDefault()
     const fd = new FormData(e.currentTarget)
+    const file = fd.get('file') as File
+    
+    // Валидация размера файла
+    if (!file || !validateFileSize(file)) {
+      return
+    }
+
+    // Предупреждение для больших файлов
+    if (file.size > 10 * 1024 * 1024) { // 10MB
+      setStatus('⚠️ Большой файл выбран. Обработка может занять несколько минут...')
+    }
+
     fd.set('community_id', String(communityId))
     setLoading(true)
-    setStatus('')
+    setStatus('Обработка документа... Это может занять несколько минут')
+    
     try{
       const r = await uploadDocument(fd)
-      setStatus(`Документ успешно загружен! ID: ${r.document_id}, чанков: ${r.chunks_inserted}`)
+      setStatus(`✅ Документ успешно загружен! ID: ${r.document_id}, чанков: ${r.chunks_inserted}`)
       setTab('docs')
       reloadDocs()
     }catch(err:any){
-      setStatus('Ошибка загрузки документа')
+      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
+        setStatus('❌ Загрузка отменена по таймауту. Попробуйте еще раз с файлом меньшего размера.')
+      } else if (err.response?.status === 413) {
+        setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
+      } else {
+        setStatus(`❌ Ошибка загрузки: ${err.message || 'Неизвестная ошибка'}`)
+      }
     } finally {
       setLoading(false)
     }
@@ -197,9 +225,21 @@ export default function AdminPanel(){
                 required 
                 disabled={loading}
                 style={{ padding: '8px' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) {
+                    if (file.size > 25 * 1024 * 1024) {
+                      setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
+                    } else if (file.size > 10 * 1024 * 1024) {
+                      setStatus('⚠️ Большой файл выбран. Обработка может занять несколько минут...')
+                    } else {
+                      setStatus('')
+                    }
+                  }
+                }}
               />
               <p className="muted" style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
-                Поддерживаемые форматы: PDF, TXT
+                Поддерживаемые форматы: PDF, TXT (максимум 25MB)
               </p>
             </div>
             
@@ -209,7 +249,7 @@ export default function AdminPanel(){
               disabled={loading}
               style={{ alignSelf: 'flex-start', marginTop: '8px' }}
             >
-              {loading ? 'Загружаю...' : '📤 Загрузить документ'}
+              {loading ? '⏳ Обрабатываю документ...' : '📤 Загрузить документ'}
             </button>
           </form>
         </div>

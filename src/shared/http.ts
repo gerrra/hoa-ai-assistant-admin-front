@@ -20,7 +20,7 @@ export const api = axios.create({
   baseURL,
   withCredentials: true,              // admin uses cookies
   headers: { "Content-Type": "application/json" },
-  timeout: 20000,
+  timeout: 300000, // 5 minutes for large file uploads
 });
 
 // helpers with safe path-join
@@ -38,7 +38,7 @@ export function upload(p: string, form: FormData, cfg?: any) {
   const uploadApi = axios.create({
     baseURL: api.defaults.baseURL,
     withCredentials: true,
-    timeout: 20000,
+    timeout: 300000, // 5 minutes for large file uploads
     // Don't set Content-Type - let browser set multipart/form-data with boundary
   });
   
