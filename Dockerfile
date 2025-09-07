@@ -1,34 +1,32 @@
-# Build stage
+# ---------- Build stage ----------
 FROM node:20-alpine AS build
 WORKDIR /app
 
-# Включаем установку devDeps вне зависимости от NODE_ENV
+# ставим dev-зависимости всегда (vite и т.д.)
 ENV NPM_CONFIG_PRODUCTION=false
 
-# Опциональные build-арги для Vite (если есть)
+# пробрасываем base URL для Vite (если используешь)
 ARG VITE_API_BASE_URL
 ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 
-# Устанавливаем зависимости
+# зависимости
 COPY package*.json ./
 RUN npm ci --include=dev
 
-# Копируем исходники
+# исходники и сборка
 COPY . .
-
-# Сборка
 RUN npm run build
 
-# Runtime stage
+# ---------- Runtime stage ----------
 FROM nginx:1.27-alpine
-# Кладём статик в nginx
+
+# кладём статик
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Простой дефолтный конфиг SPA (SPA роутинг на index.html)
-RUN printf 'server { \
-  listen 80; \
-  server_name _; \
-  root /usr/share/nginx/html; \
-  index index.html; \
-  location / { try_files $$uri /index.html; } \
-}\n' > /etc/nginx/conf.d/default.conf
+# кладём наш конфиг (без всяких printf, чтобы $ не экранировались)
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# на всякий случай отключим шаблоны envsubst, чтобы ничего не переписало конфиг
+RUN rm -f /docker-entrypoint.d/20-envsubst-on-templates.sh && rm -rf /etc/nginx/templates || true
+
+EXPOSE 80
