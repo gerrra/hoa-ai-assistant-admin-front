@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { listDocuments, listLogs, uploadDocument, logout } from '../shared/adminApi'
 import ChunkPreviewer from '../components/ChunkPreviewer'
 import { useNavigate } from 'react-router-dom'
+import { api, ADMIN_API_PREFIX, join } from '../shared/http'
 
 type DocType = 'CC&R'|'Bylaws'|'Rules'|'Policy'|'Guidelines'
 
@@ -14,6 +15,9 @@ export default function AdminPanel(){
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [openDocId, setOpenDocId] = useState<string | null>(null)
+  const [docChunks, setDocChunks] = useState<any[] | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const reloadDocs = async ()=> {
     setLoading(true)
@@ -92,6 +96,35 @@ export default function AdminPanel(){
     }
   }
 
+  const showChunks = async (docId: string) => {
+    setOpenDocId(docId)
+    setDocChunks(null)
+    try {
+      const r = await api.get(join(ADMIN_API_PREFIX, `documents/${docId}/chunks`))
+      setDocChunks(r.data || [])
+    } catch (err) {
+      setStatus('Ошибка загрузки чанков')
+    }
+  }
+
+  const deleteDocument = async (docId: string) => {
+    if (!confirm('Удалить документ и связанные чанки?')) return
+    setDeleting(true)
+    try {
+      await api.delete(join(ADMIN_API_PREFIX, `documents/${docId}`))
+      await reloadDocs()
+      if (openDocId === docId) {
+        setOpenDocId(null)
+        setDocChunks(null)
+      }
+      setStatus('Документ успешно удален')
+    } catch (err) {
+      setStatus('Ошибка удаления документа')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="wrap">
       {/* Header */}
@@ -114,9 +147,6 @@ export default function AdminPanel(){
                 style={{ width: '80px' }}
               />
             </div>
-            <button onClick={() => navigate('/documents')} className="btn-secondary">
-              📄 Управление документами
-            </button>
             <button onClick={handleLogout} className="btn-secondary">
               Выйти
             </button>
@@ -295,23 +325,95 @@ export default function AdminPanel(){
                     <th>Страниц</th>
                     <th>Размер</th>
                     <th>Дата создания</th>
+                    <th>Действия</th>
                   </tr>
                 </thead>
                 <tbody>
                   {docs.map(d=>(
-                    <tr key={d.id}>
-                      <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>#{d.id}</td>
-                      <td style={{ fontWeight: '500' }}>{d.filename || d.title || 'Без названия'}</td>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
-                        {d.pages || '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {d.size_bytes ? `${(d.size_bytes/1024/1024).toFixed(2)} MB` : '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {new Date(d.created_at).toLocaleString('ru-RU')}
-                      </td>
-                    </tr>
+                    <React.Fragment key={d.id}>
+                      <tr>
+                        <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>#{d.id}</td>
+                        <td style={{ fontWeight: '500' }}>{d.filename || d.title || 'Без названия'}</td>
+                        <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
+                          {d.pages || '—'}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                          {d.size_bytes ? `${(d.size_bytes/1024/1024).toFixed(2)} MB` : '—'}
+                        </td>
+                        <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                          {new Date(d.created_at).toLocaleString('ru-RU')}
+                        </td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button 
+                              className="btn-secondary" 
+                              onClick={() => showChunks(d.id)}
+                              style={{ fontSize: '12px', padding: '4px 8px' }}
+                            >
+                              Чанки
+                            </button>
+                            {d.rel_path && (
+                              <a 
+                                className="btn-secondary" 
+                                href={`/static/${d.rel_path}`} 
+                                target="_blank" 
+                                rel="noreferrer"
+                                style={{ fontSize: '12px', padding: '4px 8px', textDecoration: 'none' }}
+                              >
+                                PDF
+                              </a>
+                            )}
+                            <button 
+                              className="btn-danger" 
+                              onClick={() => deleteDocument(d.id)}
+                              disabled={deleting}
+                              style={{ fontSize: '12px', padding: '4px 8px' }}
+                            >
+                              Удалить
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {openDocId === d.id && (
+                        <tr>
+                          <td colSpan={6} style={{ background: 'var(--surface-hover)', padding: '0' }}>
+                            <div style={{ padding: '16px', maxHeight: '300px', overflow: 'auto' }}>
+                              {docChunks ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                  {docChunks.map((chunk, i) => (
+                                    <div key={i} style={{ 
+                                      border: '1px solid var(--border)', 
+                                      borderRadius: '4px', 
+                                      padding: '8px',
+                                      background: 'var(--surface)'
+                                    }}>
+                                      <div style={{ 
+                                        fontSize: '12px', 
+                                        color: 'var(--text-muted)',
+                                        marginBottom: '4px'
+                                      }}>
+                                        #{chunk.id} · {chunk.page ? `стр. ${chunk.page}` : 'стр. —'} · {chunk.start ?? '?'}-{chunk.end ?? '?'}
+                                      </div>
+                                      <div style={{ 
+                                        whiteSpace: 'pre-wrap', 
+                                        fontSize: '13px',
+                                        lineHeight: '1.4'
+                                      }}>
+                                        {chunk.preview}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+                                  Загрузка чанков...
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                 </tbody>
               </table>
