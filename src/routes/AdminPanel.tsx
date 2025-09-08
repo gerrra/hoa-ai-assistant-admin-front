@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react'
 import { listDocuments, listLogs, uploadDocument, logout } from '../shared/adminApi'
+import ChunkPreviewer from '../components/ChunkPreviewer'
+import { useNavigate } from 'react-router-dom'
 
 type DocType = 'CC&R'|'Bylaws'|'Rules'|'Policy'|'Guidelines'
 
 export default function AdminPanel(){
+  const navigate = useNavigate()
   const [tab, setTab] = useState<'upload'|'docs'|'logs'>('upload')
   const [communityId, setCid] = useState(1)
   const [docs, setDocs] = useState<any[]>([])
   const [logs, setLogs] = useState<any[]>([])
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
 
   const reloadDocs = async ()=> {
     setLoading(true)
@@ -110,6 +114,9 @@ export default function AdminPanel(){
                 style={{ width: '80px' }}
               />
             </div>
+            <button onClick={() => navigate('/documents')} className="btn-secondary">
+              📄 Управление документами
+            </button>
             <button onClick={handleLogout} className="btn-secondary">
               Выйти
             </button>
@@ -227,6 +234,7 @@ export default function AdminPanel(){
                 style={{ padding: '8px' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0]
+                  setSelectedFile(file)
                   if (file) {
                     if (file.size > 25 * 1024 * 1024) {
                       setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
@@ -252,6 +260,9 @@ export default function AdminPanel(){
               {loading ? '⏳ Обрабатываю документ...' : '📤 Загрузить документ'}
             </button>
           </form>
+          
+          {/* Chunk Previewer */}
+          <ChunkPreviewer file={selectedFile} />
         </div>
       )}
 
@@ -281,32 +292,25 @@ export default function AdminPanel(){
                   <tr>
                     <th>ID</th>
                     <th>Название</th>
-                    <th>Тип</th>
+                    <th>Страниц</th>
+                    <th>Размер</th>
                     <th>Дата создания</th>
-                    <th>Чанков</th>
                   </tr>
                 </thead>
                 <tbody>
                   {docs.map(d=>(
                     <tr key={d.id}>
                       <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>#{d.id}</td>
-                      <td style={{ fontWeight: '500' }}>{d.title}</td>
-                      <td>
-                        <span style={{
-                          background: 'var(--primary-light)',
-                          color: 'var(--primary)',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: '500'
-                        }}>
-                          {d.doc_type}
-                        </span>
+                      <td style={{ fontWeight: '500' }}>{d.filename || d.title || 'Без названия'}</td>
+                      <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
+                        {d.pages || '—'}
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                        {d.size_bytes ? `${(d.size_bytes/1024/1024).toFixed(2)} MB` : '—'}
                       </td>
                       <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
                         {new Date(d.created_at).toLocaleString('ru-RU')}
                       </td>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>{d.chunks}</td>
                     </tr>
                   ))}
                 </tbody>
