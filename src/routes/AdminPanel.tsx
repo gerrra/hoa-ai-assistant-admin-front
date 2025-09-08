@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { listDocuments, listLogs, uploadDocument, logout } from '../shared/adminApi'
+import { listDocuments, listLogs, uploadDocument, logout, getDocumentTopics } from '../shared/adminApi'
 import ChunkPreviewer from '../components/ChunkPreviewer'
 import ChunksModal from '../components/ChunksModal'
 import { useNavigate } from 'react-router-dom'
@@ -20,6 +20,9 @@ export default function AdminPanel(){
   const [selectedDocName, setSelectedDocName] = useState('')
   const [docChunks, setDocChunks] = useState<any[] | null>(null)
   const [chunksLoading, setChunksLoading] = useState(false)
+  const [topicsModalOpen, setTopicsModalOpen] = useState(false)
+  const [docTopics, setDocTopics] = useState<any[] | null>(null)
+  const [topicsLoading, setTopicsLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
   const reloadDocs = async ()=> {
@@ -114,6 +117,21 @@ export default function AdminPanel(){
     }
   }
 
+  const showTopics = async (docId: string, docName: string) => {
+    setSelectedDocName(docName)
+    setTopicsModalOpen(true)
+    setDocTopics(null)
+    setTopicsLoading(true)
+    try {
+      const topics = await getDocumentTopics(docId)
+      setDocTopics(topics || [])
+    } catch (err) {
+      setStatus('Ошибка загрузки топиков')
+    } finally {
+      setTopicsLoading(false)
+    }
+  }
+
   const deleteDocument = async (docId: string) => {
     if (!confirm('Удалить документ и связанные чанки?')) return
     setDeleting(true)
@@ -121,7 +139,9 @@ export default function AdminPanel(){
       await api.delete(join(ADMIN_API_PREFIX, `documents/${docId}`))
       await reloadDocs()
       setChunksModalOpen(false)
+      setTopicsModalOpen(false)
       setDocChunks(null)
+      setDocTopics(null)
       setStatus('Документ успешно удален')
     } catch (err) {
       setStatus('Ошибка удаления документа')
@@ -348,13 +368,20 @@ export default function AdminPanel(){
                         {new Date(d.created_at).toLocaleString('ru-RU')}
                       </td>
                       <td>
-                        <div style={{ display: 'flex', gap: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           <button 
                             className="btn-secondary" 
                             onClick={() => showChunks(d.id, d.filename || d.title || 'Без названия')}
                             style={{ fontSize: '12px', padding: '4px 8px' }}
                           >
                             Чанки
+                          </button>
+                          <button 
+                            className="btn-secondary" 
+                            onClick={() => showTopics(d.id, d.filename || d.title || 'Без названия')}
+                            style={{ fontSize: '12px', padding: '4px 8px' }}
+                          >
+                            Топики
                           </button>
                           {d.rel_path && (
                             <a 
@@ -464,6 +491,140 @@ export default function AdminPanel(){
         documentName={selectedDocName}
         loading={chunksLoading}
       />
+
+      {/* Topics Modal */}
+      {topicsModalOpen && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '20px'
+        }}>
+          <div style={{
+            background: 'var(--surface)',
+            borderRadius: 'var(--radius-lg)',
+            width: '100%',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            display: 'flex',
+            flexDirection: 'column',
+            boxShadow: 'var(--shadow-lg)'
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: '20px',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '20px' }}>Топики документа</h2>
+                <p style={{ margin: '4px 0 0 0', color: 'var(--text-secondary)', fontSize: '14px' }}>
+                  {selectedDocName}
+                </p>
+              </div>
+              <button
+                onClick={() => setTopicsModalOpen(false)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '24px',
+                  cursor: 'pointer',
+                  color: 'var(--text-muted)',
+                  padding: '4px'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{
+              flex: 1,
+              overflow: 'auto',
+              padding: '20px'
+            }}>
+              {topicsLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  Загрузка топиков...
+                </div>
+              ) : docTopics && docTopics.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                  Топики не найдены
+                </div>
+              ) : docTopics ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {docTopics.map((topic, i) => (
+                    <div key={i} style={{
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius)',
+                      padding: '16px',
+                      background: 'var(--surface)'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '8px'
+                      }}>
+                        <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
+                          Топик #{topic.topic_index}
+                        </h3>
+                        <div style={{
+                          fontSize: '12px',
+                          color: 'var(--text-secondary)',
+                          background: 'var(--surface-hover)',
+                          padding: '4px 8px',
+                          borderRadius: '4px'
+                        }}>
+                          стр. {topic.start_page}–{topic.end_page}
+                        </div>
+                      </div>
+                      <p style={{
+                        margin: 0,
+                        color: 'var(--text-primary)',
+                        fontSize: '14px',
+                        lineHeight: '1.5'
+                      }}>
+                        {topic.title}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '16px 20px',
+              borderTop: '1px solid var(--border)',
+              background: 'var(--surface-hover)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Всего топиков: {docTopics?.length || 0}
+              </div>
+              <button
+                onClick={() => setTopicsModalOpen(false)}
+                className="btn-secondary"
+                style={{ fontSize: '14px', padding: '8px 16px' }}
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

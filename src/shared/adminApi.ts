@@ -53,3 +53,13 @@ export async function generateTopicTitle(text: string){
   const r = await api.post(join(ADMIN_API_PREFIX, "generate-topic-title"), { text })
   return r.data as { title: string }
 }
+
+export async function getDocumentTopics(documentId: string){
+  const r = await api.get(join(ADMIN_API_PREFIX, `documents/${documentId}/topics`))
+  return r.data as Array<{
+    topic_index: number;
+    title: string;
+    start_page: number;
+    end_page: number;
+  }>
+}
