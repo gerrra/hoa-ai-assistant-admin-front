@@ -1,21 +1,18 @@
-import React, { useEffect, useState } from 'react'
-import { listDocuments, listLogs, uploadDocument, logout, getDocumentTopics } from '../shared/adminApi'
-import ChunkPreviewer from '../components/ChunkPreviewer'
+import { useEffect, useState } from 'react'
+import { listDocuments, logout, getDocumentTopics } from '../shared/adminApi'
 import ChunksModal from '../components/ChunksModal'
+import UploadModal from '../components/UploadModal'
+import { useToast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 import { api, ADMIN_API_PREFIX, join } from '../shared/http'
 
-type DocType = 'CC&R'|'Bylaws'|'Rules'|'Policy'|'Guidelines'
 
 export default function AdminPanel(){
   const navigate = useNavigate()
-  const [tab, setTab] = useState<'upload'|'docs'|'logs'>('upload')
+  const { addToast, ToastContainer } = useToast()
   const [communityId, setCid] = useState(1)
   const [docs, setDocs] = useState<any[]>([])
-  const [logs, setLogs] = useState<any[]>([])
-  const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [chunksModalOpen, setChunksModalOpen] = useState(false)
   const [selectedDocName, setSelectedDocName] = useState('')
   const [docChunks, setDocChunks] = useState<any[] | null>(null)
@@ -24,9 +21,7 @@ export default function AdminPanel(){
   const [docTopics, setDocTopics] = useState<any[] | null>(null)
   const [topicsLoading, setTopicsLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [showProgress, setShowProgress] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState(0)
-  const [autoModeNotice, setAutoModeNotice] = useState('')
+  const [uploadModalOpen, setUploadModalOpen] = useState(false)
 
   const reloadDocs = async ()=> {
     setLoading(true)
@@ -36,96 +31,14 @@ export default function AdminPanel(){
       setLoading(false)
     }
   }
-  const reloadLogs = async ()=> {
-    setLoading(true)
-    try {
-      setLogs(await listLogs(100))
-    } finally {
-      setLoading(false)
-    }
-  }
 
   useEffect(()=>{ 
-    if(tab==='docs') reloadDocs()
-    if(tab==='logs') reloadLogs() 
-  },[tab,communityId])
+    reloadDocs()
+  },[communityId])
 
-  const validateFileSize = (file: File): boolean => {
-    const maxSize = 25 * 1024 * 1024; // 25MB
-    if (file.size > maxSize) {
-      setStatus('Ошибка: Файл слишком большой. Максимальный размер: 25MB')
-      return false
-    }
-    return true
-  }
-
-  const onUpload = async (e: React.FormEvent<HTMLFormElement>)=>{
-    e.preventDefault()
-    const fd = new FormData(e.currentTarget)
-    const file = fd.get('file') as File
-    
-    // Валидация размера файла
-    if (!file || !validateFileSize(file)) {
-      return
-    }
-
-    // Сброс состояний
-    setShowProgress(false)
-    setUploadProgress(0)
-    setAutoModeNotice('')
-    setStatus('')
-
-    // Показываем прогресс для больших файлов
-    if (file.size > 5 * 1024 * 1024) { // 5MB
-      setShowProgress(true)
-      setStatus('⏳ Обработка большого файла... Это может занять несколько минут')
-    } else {
-      setStatus('⏳ Обработка документа...')
-    }
-
-    // Предупреждение для очень больших файлов
-    if (file.size > 10 * 1024 * 1024) { // 10MB
-      setAutoModeNotice('💡 Рекомендуется использовать режим "Smart" для файлов больше 10MB')
-    }
-
-    fd.set('community_id', String(communityId))
-    setLoading(true)
-    
-    // Симуляция прогресса для больших файлов
-    let progressInterval: NodeJS.Timeout | null = null
-    if (file.size > 5 * 1024 * 1024) {
-      progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) return prev
-          return prev + Math.random() * 10
-        })
-      }, 1000)
-    }
-    
-    try{
-      const r = await uploadDocument(fd)
-      setUploadProgress(100)
-      setStatus(`✅ Документ успешно загружен! ID: ${r.document_id}, чанков: ${r.chunks_inserted}`)
-      setTab('docs')
-      reloadDocs()
-    }catch(err:any){
-      if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        setStatus('❌ Загрузка отменена по таймауту. Для больших файлов рекомендуется использовать режим "Smart" в предпросмотре.')
-      } else if (err.response?.status === 413) {
-        setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
-      } else if (err.response?.status === 500) {
-        setStatus('❌ Ошибка сервера при обработке файла. Попробуйте файл меньшего размера или используйте режим "Smart".')
-      } else {
-        setStatus(`❌ Ошибка загрузки: ${err.message || 'Неизвестная ошибка'}`)
-      }
-    } finally {
-      setLoading(false)
-      setShowProgress(false)
-      setUploadProgress(0)
-      if (progressInterval) {
-        clearInterval(progressInterval)
-      }
-    }
+  const handleUploadSuccess = (result: any) => {
+    addToast(`Документ успешно загружен! ID: ${result.document_id}, чанков: ${result.chunks_inserted}`, 'success')
+    reloadDocs()
   }
 
   const handleLogout = async () => {
@@ -146,7 +59,7 @@ export default function AdminPanel(){
       const r = await api.get(join(ADMIN_API_PREFIX, `documents/${docId}/chunks`))
       setDocChunks(r.data || [])
     } catch (err) {
-      setStatus('Ошибка загрузки чанков')
+      addToast('Ошибка загрузки чанков', 'error')
     } finally {
       setChunksLoading(false)
     }
@@ -161,7 +74,7 @@ export default function AdminPanel(){
       const topics = await getDocumentTopics(docId)
       setDocTopics(topics || [])
     } catch (err) {
-      setStatus('Ошибка загрузки топиков')
+      addToast('Ошибка загрузки топиков', 'error')
     } finally {
       setTopicsLoading(false)
     }
@@ -177,9 +90,9 @@ export default function AdminPanel(){
       setTopicsModalOpen(false)
       setDocChunks(null)
       setDocTopics(null)
-      setStatus('Документ успешно удален')
+      addToast('Документ успешно удален', 'success')
     } catch (err) {
-      setStatus('Ошибка удаления документа')
+      addToast('Ошибка удаления документа', 'error')
     } finally {
       setDeleting(false)
     }
@@ -207,6 +120,9 @@ export default function AdminPanel(){
                 style={{ width: '80px' }}
               />
             </div>
+            <button onClick={() => navigate('/logs')} className="btn-secondary">
+              📊 Логи запросов
+            </button>
             <button onClick={handleLogout} className="btn-secondary">
               Выйти
             </button>
@@ -214,337 +130,108 @@ export default function AdminPanel(){
         </div>
       </div>
 
-      {/* Navigation Tabs */}
-      <div className="card" style={{ padding: '0', marginBottom: '24px' }}>
-        <div className="tabs">
-          <button 
-            className={`tab ${tab === 'upload' ? 'active' : ''}`}
-            onClick={()=>setTab('upload')}
-          >
-            📤 Загрузка документов
-          </button>
-          <button 
-            className={`tab ${tab === 'docs' ? 'active' : ''}`}
-            onClick={()=>setTab('docs')}
-          >
-            📄 Документы ({docs.length})
-          </button>
-          <button 
-            className={`tab ${tab === 'logs' ? 'active' : ''}`}
-            onClick={()=>setTab('logs')}
-          >
-            📊 Логи запросов ({logs.length})
-          </button>
-        </div>
-      </div>
-
-      {/* Status Messages */}
-      {status && (
-        <div className={`status ${status.includes('успешно') ? 'success' : status.includes('Ошибка') || status.includes('❌') ? 'error' : 'info'}`}>
-          {status}
-        </div>
-      )}
-
-      {/* Auto Mode Notice */}
-      {autoModeNotice && (
-        <div className="auto-mode-notice">
-          {autoModeNotice}
-        </div>
-      )}
-
-      {/* Progress Indicator */}
-      {showProgress && (
-        <div className="progress-indicator">
-          <div className="progress-bar">
-            <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
-          </div>
-          <div className="progress-text">
-            Обработка большого файла... {Math.round(uploadProgress)}%
-          </div>
-        </div>
-      )}
-
-      {/* Upload Tab */}
-      {tab === 'upload' && (
-        <div className="card">
-          <h2>Загрузка нового документа</h2>
-          <form onSubmit={onUpload} className="col" style={{ maxWidth: '600px' }}>
-            <div>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '6px', 
-                fontSize: '14px', 
-                fontWeight: '500',
-                color: 'var(--text-primary)'
-              }}>
-                Название документа *
-              </label>
-              <input 
-                name="title" 
-                placeholder="Введите название документа" 
-                required 
-                disabled={loading}
-              />
-            </div>
-            
-            <div>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '6px', 
-                fontSize: '14px', 
-                fontWeight: '500',
-                color: 'var(--text-primary)'
-              }}>
-                Тип документа *
-              </label>
-              <select name="doc_type" required disabled={loading}>
-                <option value="">Выберите тип документа</option>
-                <option value="CC&R">CC&R (Условия, ограничения и правила)</option>
-                <option value="Bylaws">Bylaws (Устав)</option>
-                <option value="Rules">Rules (Правила)</option>
-                <option value="Policy">Policy (Политика)</option>
-                <option value="Guidelines">Guidelines (Руководящие принципы)</option>
-              </select>
-            </div>
-            
-            <div>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '6px', 
-                fontSize: '14px', 
-                fontWeight: '500',
-                color: 'var(--text-primary)'
-              }}>
-                Видимость документа
-              </label>
-              <select name="visibility" defaultValue="resident" disabled={loading}>
-                <option value="resident">👥 Жители (Resident)</option>
-                <option value="board">👔 Правление (Board)</option>
-                <option value="staff">🏢 Офис (Staff)</option>
-              </select>
-            </div>
-            
-            <div>
-              <label style={{ 
-                display: 'block', 
-                marginBottom: '6px', 
-                fontSize: '14px', 
-                fontWeight: '500',
-                color: 'var(--text-primary)'
-              }}>
-                Файл документа *
-              </label>
-              <input 
-                type="file" 
-                name="file" 
-                accept=".pdf,.txt" 
-                required 
-                disabled={loading}
-                style={{ padding: '8px' }}
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  setSelectedFile(file)
-                  setAutoModeNotice('')
-                  
-                  if (file) {
-                    const fileSizeMB = (file.size / 1024 / 1024).toFixed(2)
-                    
-                    if (file.size > 25 * 1024 * 1024) {
-                      setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
-                    } else if (file.size > 10 * 1024 * 1024) {
-                      setStatus(`⚠️ Большой файл выбран (${fileSizeMB} MB). Обработка может занять несколько минут...`)
-                      setAutoModeNotice('💡 Рекомендуется использовать режим "Smart" для лучшей производительности')
-                    } else if (file.size > 5 * 1024 * 1024) {
-                      setStatus(`📄 Файл среднего размера (${fileSizeMB} MB). Обработка может занять время...`)
-                    } else {
-                      setStatus('')
-                    }
-                  } else {
-                    setStatus('')
-                  }
-                }}
-              />
-              <p className="muted" style={{ margin: '4px 0 0 0', fontSize: '12px' }}>
-                Поддерживаемые форматы: PDF, TXT (максимум 25MB)
-              </p>
-            </div>
-            
-            <button 
-              type="submit" 
-              className="btn-primary"
-              disabled={loading}
-              style={{ alignSelf: 'flex-start', marginTop: '8px' }}
-            >
-              {loading ? '⏳ Обрабатываю документ...' : '📤 Загрузить документ'}
+      {/* Documents List */}
+      <div className="card">
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+          <h2>Документы сообщества #{communityId}</h2>
+          <div className="row" style={{ gap: '12px' }}>
+            <button onClick={() => setUploadModalOpen(true)} className="btn-primary">
+              📤 Добавить документ
             </button>
-          </form>
-          
-          {/* Chunk Previewer */}
-          <ChunkPreviewer file={selectedFile} />
-        </div>
-      )}
-
-      {/* Documents Tab */}
-      {tab === 'docs' && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2>Документы сообщества #{communityId}</h2>
             <button onClick={reloadDocs} className="btn-secondary" disabled={loading}>
               {loading ? 'Обновляю...' : '🔄 Обновить'}
             </button>
           </div>
-          
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              Загружаю документы...
-            </div>
-          ) : docs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              <p>Документы не найдены</p>
-              <p className="muted">Загрузите первый документ на вкладке "Загрузка документов"</p>
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Название</th>
-                    <th>Страниц</th>
-                    <th>Размер</th>
-                    <th>Дата создания</th>
-                    <th>Действия</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {docs.map(d=>(
-                    <tr key={d.id}>
-                      <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>#{d.id}</td>
-                      <td style={{ fontWeight: '500' }}>{d.filename || d.title || 'Без названия'}</td>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
-                        {d.pages || '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {d.size_bytes ? `${(d.size_bytes/1024/1024).toFixed(2)} MB` : '—'}
-                      </td>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {new Date(d.created_at).toLocaleString('ru-RU')}
-                      </td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <button 
-                            className="btn-secondary" 
-                            onClick={() => showChunks(d.id, d.filename || d.title || 'Без названия')}
-                            style={{ fontSize: '12px', padding: '4px 8px' }}
-                          >
-                            Чанки
-                          </button>
-                          <button 
-                            className="btn-secondary" 
-                            onClick={() => showTopics(d.id, d.filename || d.title || 'Без названия')}
-                            style={{ fontSize: '12px', padding: '4px 8px' }}
-                          >
-                            Топики
-                          </button>
-                          {d.rel_path && (
-                            <a 
-                              className="btn-secondary" 
-                              href={`/static/${d.rel_path}`} 
-                              target="_blank" 
-                              rel="noreferrer"
-                              style={{ fontSize: '12px', padding: '4px 8px', textDecoration: 'none' }}
-                            >
-                              PDF
-                            </a>
-                          )}
-                          <button 
-                            className="btn-danger" 
-                            onClick={() => deleteDocument(d.id)}
-                            disabled={deleting}
-                            style={{ fontSize: '12px', padding: '4px 8px' }}
-                          >
-                            Удалить
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
-      )}
-
-      {/* Logs Tab */}
-      {tab === 'logs' && (
-        <div className="card">
-          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2>Логи запросов</h2>
-            <button onClick={reloadLogs} className="btn-secondary" disabled={loading}>
-              {loading ? 'Обновляю...' : '🔄 Обновить'}
-            </button>
+        
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+            Загружаю документы...
           </div>
-          
-          {loading ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              Загружаю логи...
-            </div>
-          ) : logs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-              <p>Логи не найдены</p>
-              <p className="muted">Запросы появятся здесь после использования системы</p>
-            </div>
-          ) : (
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Дата и время</th>
-                    <th>Роль пользователя</th>
-                    <th>Вопрос</th>
-                    <th>Уверенность</th>
+        ) : docs.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+            <p>Документы не найдены</p>
+            <p className="muted">Нажмите "Добавить документ" для загрузки первого документа</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Название</th>
+                  <th>Страниц</th>
+                  <th>Размер</th>
+                  <th>Дата создания</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody>
+                {docs.map(d=>(
+                  <tr key={d.id}>
+                    <td style={{ fontFamily: 'monospace', fontSize: '13px' }}>#{d.id}</td>
+                    <td style={{ fontWeight: '500' }}>{d.filename || d.title || 'Без названия'}</td>
+                    <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
+                      {d.pages || '—'}
+                    </td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                      {d.size_bytes ? `${(d.size_bytes/1024/1024).toFixed(2)} MB` : '—'}
+                    </td>
+                    <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
+                      {new Date(d.created_at).toLocaleString('ru-RU')}
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button 
+                          className="btn-secondary" 
+                          onClick={() => showChunks(d.id, d.filename || d.title || 'Без названия')}
+                          style={{ fontSize: '12px', padding: '4px 8px' }}
+                        >
+                          Чанки
+                        </button>
+                        <button 
+                          className="btn-secondary" 
+                          onClick={() => showTopics(d.id, d.filename || d.title || 'Без названия')}
+                          style={{ fontSize: '12px', padding: '4px 8px' }}
+                        >
+                          Топики
+                        </button>
+                        {d.rel_path && (
+                          <a 
+                            className="btn-secondary" 
+                            href={`/static/${d.rel_path}`} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            style={{ fontSize: '12px', padding: '4px 8px', textDecoration: 'none' }}
+                          >
+                            PDF
+                          </a>
+                        )}
+                        <button 
+                          className="btn-danger" 
+                          onClick={() => deleteDocument(d.id)}
+                          disabled={deleting}
+                          style={{ fontSize: '12px', padding: '4px 8px' }}
+                        >
+                          Удалить
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {logs.map((l,i)=>(
-                    <tr key={i}>
-                      <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
-                        {new Date(l.created_at).toLocaleString('ru-RU')}
-                      </td>
-                      <td>
-                        <span style={{
-                          background: l.user_role === 'resident' ? '#d1fae5' : 
-                                     l.user_role === 'board' ? '#dbeafe' : '#fef3c7',
-                          color: l.user_role === 'resident' ? '#065f46' : 
-                                 l.user_role === 'board' ? '#1e40af' : '#92400e',
-                          padding: '4px 8px',
-                          borderRadius: '4px',
-                          fontSize: '12px',
-                          fontWeight: '500'
-                        }}>
-                          {l.user_role === 'resident' ? '👥 Житель' : 
-                           l.user_role === 'board' ? '👔 Правление' : '🏢 Офис'}
-                        </span>
-                      </td>
-                      <td style={{ maxWidth: '300px', wordBreak: 'break-word' }}>{l.question}</td>
-                      <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
-                        <span style={{
-                          color: Number(l.confidence) > 0.8 ? 'var(--success)' : 
-                                 Number(l.confidence) > 0.6 ? 'var(--warning)' : 'var(--danger)',
-                          fontWeight: '600'
-                        }}>
-                          {(Number(l.confidence) * 100).toFixed(1)}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Upload Modal */}
+      <UploadModal
+        isOpen={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        onSuccess={handleUploadSuccess}
+        communityId={communityId}
+      />
 
       {/* Chunks Modal */}
       <ChunksModal
@@ -688,6 +375,9 @@ export default function AdminPanel(){
           </div>
         </div>
       )}
+
+      {/* Toast Container */}
+      <ToastContainer />
     </div>
   )
 }
