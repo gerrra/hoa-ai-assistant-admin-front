@@ -10,6 +10,13 @@ export default function ChunkPreviewer({ file }:{ file: File | null }) {
   const [running, setRunning] = useState(false);
   const [total, setTotal] = useState<number|null>(null);
 
+  // Автоматически выбираем режим для больших файлов
+  useEffect(() => {
+    if (file && file.size > 5 * 1024 * 1024) { // 5MB
+      setMode("smart");
+    }
+  }, [file]);
+
   useEffect(()=>{ setItems([]); setTotal(null); }, [file, mode]);
 
   async function start() {
@@ -53,6 +60,13 @@ export default function ChunkPreviewer({ file }:{ file: File | null }) {
 
   return (
     <div className="mt-4">
+      {/* Auto mode notice for large files */}
+      {file && file.size > 5 * 1024 * 1024 && mode === "smart" && (
+        <div className="auto-mode-notice" style={{ marginBottom: '12px' }}>
+          💡 Автоматически выбран режим "Smart" для файла {Math.round(file.size / 1024 / 1024)}MB
+        </div>
+      )}
+      
       <div className="flex items-center gap-3 mb-2">
         <select className="border rounded px-2 py-1" value={mode} onChange={e=>setMode(e.target.value as any)}>
           <option value="smart">Smart (по предложениям)</option>

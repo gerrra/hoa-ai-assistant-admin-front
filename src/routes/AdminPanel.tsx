@@ -24,6 +24,9 @@ export default function AdminPanel(){
   const [docTopics, setDocTopics] = useState<any[] | null>(null)
   const [topicsLoading, setTopicsLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [showProgress, setShowProgress] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [autoModeNotice, setAutoModeNotice] = useState('')
 
   const reloadDocs = async ()=> {
     setLoading(true)
@@ -66,30 +69,62 @@ export default function AdminPanel(){
       return
     }
 
-    // Предупреждение для больших файлов
+    // Сброс состояний
+    setShowProgress(false)
+    setUploadProgress(0)
+    setAutoModeNotice('')
+    setStatus('')
+
+    // Показываем прогресс для больших файлов
+    if (file.size > 5 * 1024 * 1024) { // 5MB
+      setShowProgress(true)
+      setStatus('⏳ Обработка большого файла... Это может занять несколько минут')
+    } else {
+      setStatus('⏳ Обработка документа...')
+    }
+
+    // Предупреждение для очень больших файлов
     if (file.size > 10 * 1024 * 1024) { // 10MB
-      setStatus('⚠️ Большой файл выбран. Обработка может занять несколько минут...')
+      setAutoModeNotice('💡 Рекомендуется использовать режим "Smart" для файлов больше 10MB')
     }
 
     fd.set('community_id', String(communityId))
     setLoading(true)
-    setStatus('Обработка документа... Это может занять несколько минут')
+    
+    // Симуляция прогресса для больших файлов
+    let progressInterval: NodeJS.Timeout | null = null
+    if (file.size > 5 * 1024 * 1024) {
+      progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) return prev
+          return prev + Math.random() * 10
+        })
+      }, 1000)
+    }
     
     try{
       const r = await uploadDocument(fd)
+      setUploadProgress(100)
       setStatus(`✅ Документ успешно загружен! ID: ${r.document_id}, чанков: ${r.chunks_inserted}`)
       setTab('docs')
       reloadDocs()
     }catch(err:any){
       if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-        setStatus('❌ Загрузка отменена по таймауту. Попробуйте еще раз с файлом меньшего размера.')
+        setStatus('❌ Загрузка отменена по таймауту. Для больших файлов рекомендуется использовать режим "Smart" в предпросмотре.')
       } else if (err.response?.status === 413) {
         setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
+      } else if (err.response?.status === 500) {
+        setStatus('❌ Ошибка сервера при обработке файла. Попробуйте файл меньшего размера или используйте режим "Smart".')
       } else {
         setStatus(`❌ Ошибка загрузки: ${err.message || 'Неизвестная ошибка'}`)
       }
     } finally {
       setLoading(false)
+      setShowProgress(false)
+      setUploadProgress(0)
+      if (progressInterval) {
+        clearInterval(progressInterval)
+      }
     }
   }
 
@@ -205,8 +240,27 @@ export default function AdminPanel(){
 
       {/* Status Messages */}
       {status && (
-        <div className={`status ${status.includes('успешно') ? 'success' : status.includes('Ошибка') ? 'error' : 'info'}`}>
+        <div className={`status ${status.includes('успешно') ? 'success' : status.includes('Ошибка') || status.includes('❌') ? 'error' : 'info'}`}>
           {status}
+        </div>
+      )}
+
+      {/* Auto Mode Notice */}
+      {autoModeNotice && (
+        <div className="auto-mode-notice">
+          {autoModeNotice}
+        </div>
+      )}
+
+      {/* Progress Indicator */}
+      {showProgress && (
+        <div className="progress-indicator">
+          <div className="progress-bar">
+            <div className="progress-fill" style={{ width: `${uploadProgress}%` }}></div>
+          </div>
+          <div className="progress-text">
+            Обработка большого файла... {Math.round(uploadProgress)}%
+          </div>
         </div>
       )}
 
@@ -290,14 +344,23 @@ export default function AdminPanel(){
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   setSelectedFile(file)
+                  setAutoModeNotice('')
+                  
                   if (file) {
+                    const fileSizeMB = (file.size / 1024 / 1024).toFixed(2)
+                    
                     if (file.size > 25 * 1024 * 1024) {
                       setStatus('❌ Файл слишком большой. Максимальный размер: 25MB')
                     } else if (file.size > 10 * 1024 * 1024) {
-                      setStatus('⚠️ Большой файл выбран. Обработка может занять несколько минут...')
+                      setStatus(`⚠️ Большой файл выбран (${fileSizeMB} MB). Обработка может занять несколько минут...`)
+                      setAutoModeNotice('💡 Рекомендуется использовать режим "Smart" для лучшей производительности')
+                    } else if (file.size > 5 * 1024 * 1024) {
+                      setStatus(`📄 Файл среднего размера (${fileSizeMB} MB). Обработка может занять время...`)
                     } else {
                       setStatus('')
                     }
+                  } else {
+                    setStatus('')
                   }
                 }}
               />

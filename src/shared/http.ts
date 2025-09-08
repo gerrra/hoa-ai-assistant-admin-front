@@ -8,7 +8,7 @@ export const api = axios.create({
   baseURL: envBase || fallbackBase,
   withCredentials: true,
   headers: { "Content-Type": "application/json" },
-  timeout: 30000,
+  timeout: 600000, // 10 минут для больших файлов
 });
 
 export function join(...parts: string[]) {
