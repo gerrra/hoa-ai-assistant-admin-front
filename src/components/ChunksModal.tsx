@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { generateTopicTitle } from '../shared/adminApi'
 
 type Chunk = {
   id: number
@@ -21,6 +22,7 @@ export default function ChunksModal({ isOpen, onClose, chunks, documentName, loa
   const [groupedChunks, setGroupedChunks] = useState<Record<string, Chunk[]>>({})
   const [expandedTopics, setExpandedTopics] = useState<Set<string>>(new Set())
   const [searchTerm, setSearchTerm] = useState('')
+  const [generatingTopics, setGeneratingTopics] = useState(false)
 
   // Группировка чанков по топикам
   useEffect(() => {
@@ -29,29 +31,98 @@ export default function ChunksModal({ isOpen, onClose, chunks, documentName, loa
       return
     }
 
-    const grouped: Record<string, Chunk[]> = {}
-    
-    chunks.forEach(chunk => {
-      // Извлекаем топик из текста (первое предложение или первые 50 символов)
-      const topic = extractTopic(chunk.preview)
-      if (!grouped[topic]) {
-        grouped[topic] = []
+    const groupChunks = async () => {
+      setGeneratingTopics(true)
+      const grouped: Record<string, Chunk[]> = {}
+      
+      // Сначала группируем по базовым топикам
+      for (const chunk of chunks) {
+        const topic = extractTopic(chunk.preview)
+        if (!grouped[topic]) {
+          grouped[topic] = []
+        }
+        grouped[topic].push(chunk)
       }
-      grouped[topic].push(chunk)
-    })
 
-    setGroupedChunks(grouped)
-    // Автоматически разворачиваем все топики
-    setExpandedTopics(new Set(Object.keys(grouped)))
+      // Показываем базовую группировку сразу
+      setGroupedChunks(grouped)
+      setExpandedTopics(new Set())
+
+      // Теперь улучшаем названия топиков через ИИ
+      const improvedGrouped: Record<string, Chunk[]> = {}
+      const topicPromises = Object.entries(grouped).map(async ([topic, topicChunks]) => {
+        try {
+          // Объединяем текст всех чанков в топике для лучшего понимания контекста
+          const combinedText = topicChunks.map(c => c.preview).join(' ').substring(0, 1000)
+          const aiResponse = await generateTopicTitle(combinedText)
+          const improvedTopic = aiResponse.title || topic
+          return { topic: improvedTopic, chunks: topicChunks }
+        } catch (error) {
+          console.warn('Failed to generate AI topic title:', error)
+          return { topic, chunks: topicChunks }
+        }
+      })
+
+      const results = await Promise.all(topicPromises)
+      
+      results.forEach(({ topic, chunks }) => {
+        improvedGrouped[topic] = chunks
+      })
+
+      setGroupedChunks(improvedGrouped)
+      setGeneratingTopics(false)
+    }
+
+    groupChunks()
   }, [chunks])
 
   const extractTopic = (text: string): string => {
-    // Берем первое предложение или первые 50 символов
-    const firstSentence = text.split(/[.!?]/)[0].trim()
+    // Улучшенная логика извлечения топика
+    const cleanText = text.trim()
+    
+    // Ищем ключевые слова и фразы
+    const keywords = [
+      'правила', 'политика', 'условия', 'ограничения', 'требования',
+      'обязанности', 'права', 'ответственность', 'штрафы', 'санкции',
+      'управление', 'администрация', 'совет', 'правление', 'комитет',
+      'собственность', 'недвижимость', 'квартира', 'дом', 'участок',
+      'платежи', 'взносы', 'сборы', 'налоги', 'расходы',
+      'ремонт', 'обслуживание', 'уборка', 'благоустройство',
+      'парковка', 'стоянка', 'гараж', 'место',
+      'жильцы', 'соседи', 'гости', 'посетители',
+      'шум', 'тишина', 'порядок', 'чистота',
+      'животные', 'питомцы', 'собаки', 'кошки',
+      'курение', 'алкоголь', 'вечеринки', 'мероприятия'
+    ]
+    
+    // Ищем первое упоминание ключевого слова
+    for (const keyword of keywords) {
+      const index = cleanText.toLowerCase().indexOf(keyword.toLowerCase())
+      if (index !== -1) {
+        // Берем контекст вокруг ключевого слова
+        const start = Math.max(0, index - 20)
+        const end = Math.min(cleanText.length, index + keyword.length + 30)
+        let topic = cleanText.substring(start, end).trim()
+        
+        // Очищаем и форматируем
+        topic = topic.replace(/^[^\w\u0400-\u04FF]*/, '') // убираем знаки в начале
+        topic = topic.replace(/[^\w\u0400-\u04FF\s]*$/, '') // убираем знаки в конце
+        
+        if (topic.length > 60) {
+          topic = topic.substring(0, 60) + '...'
+        }
+        
+        return topic || 'Общие положения'
+      }
+    }
+    
+    // Если ключевых слов не найдено, берем первое предложение
+    const firstSentence = cleanText.split(/[.!?]/)[0].trim()
     if (firstSentence.length > 50) {
       return firstSentence.substring(0, 50) + '...'
     }
-    return firstSentence || 'Без названия'
+    
+    return firstSentence || 'Общие положения'
   }
 
   const toggleTopic = (topic: string) => {
@@ -155,6 +226,21 @@ export default function ChunksModal({ isOpen, onClose, chunks, documentName, loa
               {searchTerm ? 'Топики не найдены' : 'Чанки не найдены'}
             </div>
           ) : (
+            <>
+              {generatingTopics && (
+                <div style={{
+                  background: 'var(--primary-light)',
+                  border: '1px solid var(--primary)',
+                  borderRadius: 'var(--radius)',
+                  padding: '12px',
+                  marginBottom: '16px',
+                  textAlign: 'center',
+                  color: 'var(--primary)',
+                  fontSize: '14px'
+                }}>
+                  🤖 Генерирую умные названия топиков...
+                </div>
+              )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {filteredTopics.map(([topic, topicChunks]) => (
                 <div key={topic} style={{
@@ -240,6 +326,7 @@ export default function ChunksModal({ isOpen, onClose, chunks, documentName, loa
                 </div>
               ))}
             </div>
+            </>
           )}
         </div>
 

@@ -48,3 +48,8 @@ export async function logout(){
   const r = await api.post(join(ADMIN_API_PREFIX, "logout"))
   return r.data
 }
+
+export async function generateTopicTitle(text: string){
+  const r = await api.post(join(ADMIN_API_PREFIX, "generate-topic-title"), { text })
+  return r.data as { title: string }
+}
