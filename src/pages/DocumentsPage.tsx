@@ -567,7 +567,6 @@ export default function DocumentsPage() {
         isOpen={uploadModalOpen}
         onClose={() => setUploadModalOpen(false)}
         onSuccess={handleUploadSuccess}
-        communityId={0}
       />
 
       {/* Chunks Modal */}

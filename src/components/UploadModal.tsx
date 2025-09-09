@@ -1,19 +1,36 @@
-import React, { useState } from 'react'
-import { uploadDocument } from '../shared/adminApi'
+import React, { useState, useEffect } from 'react'
+import { uploadDocument, listCommunities } from '../shared/adminApi'
 
 type UploadModalProps = {
   isOpen: boolean
   onClose: () => void
   onSuccess: (result: any) => void
-  communityId?: number
 }
 
-export default function UploadModal({ isOpen, onClose, onSuccess, communityId }: UploadModalProps) {
+export default function UploadModal({ isOpen, onClose, onSuccess }: UploadModalProps) {
   const [loading, setLoading] = useState(false)
   const [showProgress, setShowProgress] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [autoModeNotice, setAutoModeNotice] = useState('')
   const [status, setStatus] = useState('')
+  const [communities, setCommunities] = useState<Array<{id: number; name: string; description: string}>>([])
+  const [selectedCommunityId, setSelectedCommunityId] = useState<string>('')
+
+  // Загружаем список сообществ при открытии модального окна
+  useEffect(() => {
+    if (isOpen) {
+      loadCommunities()
+    }
+  }, [isOpen])
+
+  const loadCommunities = async () => {
+    try {
+      const data = await listCommunities()
+      setCommunities(data)
+    } catch (err) {
+      console.error('Ошибка загрузки сообществ:', err)
+    }
+  }
 
   const validateFileSize = (file: File): boolean => {
     const maxSize = 25 * 1024 * 1024 // 25MB
@@ -29,10 +46,19 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
     const fd = new FormData(e.currentTarget)
     const file = fd.get('file') as File
     
+    // Валидация выбора сообщества
+    if (!selectedCommunityId) {
+      setStatus('❌ Выберите сообщество')
+      return
+    }
+    
     // Валидация размера файла
     if (!file || !validateFileSize(file)) {
       return
     }
+
+    // Добавляем community_id в FormData
+    fd.set('community_id', selectedCommunityId)
 
     // Сброс состояний
     setShowProgress(false)
@@ -184,17 +210,29 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
                 fontWeight: '500',
                 color: 'var(--text-primary)'
               }}>
-                Community ID *
+                Сообщество *
               </label>
-              <input 
-                name="community_id" 
-                type="number"
-                placeholder="Введите ID сообщества" 
-                required 
+              <select
+                value={selectedCommunityId}
+                onChange={(e) => setSelectedCommunityId(e.target.value)}
+                required
                 disabled={loading}
-                min="1"
-                step="1"
-              />
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid var(--border)',
+                  borderRadius: 'var(--radius)',
+                  fontSize: '14px',
+                  background: 'white'
+                }}
+              >
+                <option value="">Выберите сообщество</option>
+                {communities.map(community => (
+                  <option key={community.id} value={community.id}>
+                    {community.name}
+                  </option>
+                ))}
+              </select>
             </div>
             
             <div>
