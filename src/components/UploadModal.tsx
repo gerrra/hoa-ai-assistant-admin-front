@@ -1,17 +1,15 @@
 import React, { useState } from 'react'
 import { uploadDocument } from '../shared/adminApi'
-import ChunkPreviewer from './ChunkPreviewer'
 
 type UploadModalProps = {
   isOpen: boolean
   onClose: () => void
   onSuccess: (result: any) => void
-  communityId: number
+  communityId?: number
 }
 
 export default function UploadModal({ isOpen, onClose, onSuccess, communityId }: UploadModalProps) {
   const [loading, setLoading] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [showProgress, setShowProgress] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [autoModeNotice, setAutoModeNotice] = useState('')
@@ -55,7 +53,7 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
       setAutoModeNotice('💡 Рекомендуется использовать режим "Smart" для файлов больше 10MB')
     }
 
-    fd.set('community_id', String(communityId))
+    // community_id теперь берется из формы
     setLoading(true)
     
     // Симуляция прогресса для больших файлов
@@ -186,6 +184,27 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
                 fontWeight: '500',
                 color: 'var(--text-primary)'
               }}>
+                Community ID *
+              </label>
+              <input 
+                name="community_id" 
+                type="number"
+                placeholder="Введите ID сообщества" 
+                required 
+                disabled={loading}
+                min="1"
+                step="1"
+              />
+            </div>
+            
+            <div>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '6px', 
+                fontSize: '14px', 
+                fontWeight: '500',
+                color: 'var(--text-primary)'
+              }}>
                 Название документа *
               </label>
               <input 
@@ -235,6 +254,34 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
             
             <div>
               <label style={{ 
+                display: 'flex', 
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '6px', 
+                fontSize: '14px', 
+                fontWeight: '500',
+                color: 'var(--text-primary)',
+                cursor: 'pointer',
+                lineHeight: '1.4'
+              }}>
+                <input 
+                  type="checkbox" 
+                  name="use_topic_analysis" 
+                  defaultChecked
+                  disabled={loading}
+                  style={{ 
+                    margin: 0,
+                    width: '16px',
+                    height: '16px',
+                    flexShrink: 0
+                  }}
+                />
+                Использовать анализ топиков
+              </label>
+            </div>
+            
+            <div>
+              <label style={{ 
                 display: 'block', 
                 marginBottom: '6px', 
                 fontSize: '14px', 
@@ -252,7 +299,6 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
                 style={{ padding: '8px' }}
                 onChange={(e) => {
                   const file = e.target.files?.[0]
-                  setSelectedFile(file)
                   setAutoModeNotice('')
                   
                   if (file) {
@@ -288,8 +334,6 @@ export default function UploadModal({ isOpen, onClose, onSuccess, communityId }:
             </button>
           </form>
           
-          {/* Chunk Previewer */}
-          <ChunkPreviewer file={selectedFile} />
         </div>
       </div>
     </div>

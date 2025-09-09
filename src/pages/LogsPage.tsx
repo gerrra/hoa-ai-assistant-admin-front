@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { listLogs } from '../shared/adminApi'
-import { useNavigate } from 'react-router-dom'
 
 export default function LogsPage() {
-  const navigate = useNavigate()
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -21,27 +19,26 @@ export default function LogsPage() {
   }, [])
 
   return (
-    <div className="wrap">
+    <div style={{ padding: '24px' }}>
       {/* Header */}
-      <div className="card" style={{ marginBottom: '24px' }}>
-        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: '24px' }}>Логи запросов</h1>
-            <p className="muted" style={{ margin: '4px 0 0 0' }}>История всех запросов к системе</p>
-          </div>
-          <div className="row" style={{ alignItems: 'center', gap: '16px' }}>
-            <button onClick={() => navigate('/')} className="btn-secondary">
-              ← Назад к документам
-            </button>
-            <button onClick={reloadLogs} className="btn-secondary" disabled={loading}>
-              {loading ? 'Обновляю...' : '🔄 Обновить'}
-            </button>
-          </div>
-        </div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '24px'
+      }}>
+        <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>
+          Логи запросов
+        </h1>
       </div>
 
-      {/* Logs Table */}
-      <div className="card">
+      {/* Logs List */}
+      <div style={{
+        background: 'var(--surface)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden'
+      }}>
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
             Загружаю логи...

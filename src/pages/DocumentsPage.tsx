@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { listDocuments, getDocumentTopics, listCommunities } from '../shared/adminApi'
 import ChunksModal from '../components/ChunksModal'
 import TopicsModal from '../components/TopicsModal'
@@ -6,8 +6,7 @@ import UploadModal from '../components/UploadModal'
 import { useToast } from '../components/Toast'
 import { api, ADMIN_API_PREFIX, join } from '../shared/http'
 
-
-export default function AdminPanel(){
+export default function DocumentsPage() {
   const { addToast, ToastContainer } = useToast()
   const [communities, setCommunities] = useState<any[]>([])
   const [filters, setFilters] = useState({
@@ -33,8 +32,9 @@ export default function AdminPanel(){
     try {
       const data = await listCommunities()
       setCommunities(data)
-    } catch (err) {
-      addToast('Ошибка загрузки сообществ', 'error')
+    } catch (err: any) {
+      const errorMessage = err.message || 'Ошибка загрузки сообществ'
+      addToast(String(errorMessage), 'error')
     }
   }
 
@@ -45,10 +45,10 @@ export default function AdminPanel(){
       const allDocs = await listDocuments(communityId)
       
       // Применяем фильтры на фронтенде
-      let filteredDocs = allDocs.filter(doc => {
+      let filteredDocs = (allDocs || []).filter(doc => {
         const matchesSearch = !filters.search || 
-          doc.title?.toLowerCase().includes(filters.search.toLowerCase()) ||
-          doc.filename?.toLowerCase().includes(filters.search.toLowerCase())
+          (doc.title || '').toLowerCase().includes(filters.search.toLowerCase()) ||
+          (doc.filename || '').toLowerCase().includes(filters.search.toLowerCase())
         
         const matchesDocType = !filters.docType || doc.doc_type === filters.docType
         const matchesVisibility = !filters.visibility || doc.visibility === filters.visibility
@@ -65,7 +65,7 @@ export default function AdminPanel(){
             return (b.pages || 0) - (a.pages || 0)
           case 'created_at':
           default:
-            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
         }
       })
 
@@ -89,7 +89,6 @@ export default function AdminPanel(){
     reloadDocs()
   }
 
-
   const showChunks = async (docId: string, docName: string) => {
     setSelectedDocName(docName)
     setChunksModalOpen(true)
@@ -98,8 +97,9 @@ export default function AdminPanel(){
     try {
       const r = await api.get(join(ADMIN_API_PREFIX, `documents/${docId}/chunks`))
       setDocChunks(r.data || [])
-    } catch (err) {
-      addToast('Ошибка загрузки чанков', 'error')
+    } catch (err: any) {
+      const errorMessage = err.message || 'Ошибка загрузки чанков'
+      addToast(String(errorMessage), 'error')
     } finally {
       setChunksLoading(false)
     }
@@ -113,8 +113,9 @@ export default function AdminPanel(){
     try {
       const topics = await getDocumentTopics(docId)
       setDocTopics(topics || [])
-    } catch (err) {
-      addToast('Ошибка загрузки топиков', 'error')
+    } catch (err: any) {
+      const errorMessage = err.message || 'Ошибка загрузки топиков'
+      addToast(String(errorMessage), 'error')
     } finally {
       setTopicsLoading(false)
     }
@@ -131,8 +132,9 @@ export default function AdminPanel(){
       setDocChunks(null)
       setDocTopics(null)
       addToast('Документ успешно удален', 'success')
-    } catch (err) {
-      addToast('Ошибка удаления документа', 'error')
+    } catch (err: any) {
+      const errorMessage = err.message || 'Ошибка удаления документа'
+      addToast(String(errorMessage), 'error')
     } finally {
       setDeleting(false)
     }
@@ -146,6 +148,12 @@ export default function AdminPanel(){
       visibility: '',
       sortBy: 'created_at'
     })
+  }
+
+  const getCommunityName = (communityId: number | undefined) => {
+    if (!communityId) return '—'
+    const community = communities.find(c => c.id === communityId)
+    return community?.name || `ID: ${communityId}`
   }
 
   return (
@@ -190,7 +198,7 @@ export default function AdminPanel(){
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
           gap: '16px',
-          alignItems: 'end'
+          alignItems: 'flex-end'
         }}>
           <div>
             <label style={{
@@ -332,11 +340,14 @@ export default function AdminPanel(){
             </select>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'end' }}>
+          <div>
             <button
               onClick={clearFilters}
               className="btn-secondary"
-              style={{ padding: '8px 16px', fontSize: '14px' }}
+              style={{ 
+                padding: '8px 16px', 
+                fontSize: '14px'
+              }}
             >
               Очистить фильтры
             </button>
@@ -351,7 +362,6 @@ export default function AdminPanel(){
         borderRadius: 'var(--radius-lg)',
         overflow: 'hidden'
       }}>
-        
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
             Загружаю документы...
@@ -372,7 +382,7 @@ export default function AdminPanel(){
                   <th>Размер</th>
                   <th>Чанки</th>
                   <th>Топики</th>
-                  <th>Community ID</th>
+                  <th>Community</th>
                   <th>Дата создания</th>
                   <th>Действия</th>
                 </tr>
@@ -455,14 +465,14 @@ export default function AdminPanel(){
                         </button>
                       ) : '—'}
                     </td>
-                    <td style={{ textAlign: 'center', fontFamily: 'monospace' }}>
-                      {d.community_id || '—'}
+                    <td style={{ textAlign: 'left' }}>
+                      {getCommunityName(d.community_id)}
                     </td>
                     <td style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
                       {new Date(d.created_at).toLocaleString('ru-RU')}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'flex-start' }}>
                         {d.rel_path && (
                           <a 
                             href={`http://localhost:8000/${d.rel_path}`} 
@@ -578,7 +588,6 @@ export default function AdminPanel(){
         loading={topicsLoading}
       />
 
-      {/* Toast Container */}
       <ToastContainer />
     </div>
   )
